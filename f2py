@@ -1,0 +1,144 @@
+import requests
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+import requests
+
+# Replace 'demo' with your actual Alpha Vantage API key
+api_key = 'NJKYRUEVWVEEVL4Y'  # Example key, replace with your own
+url = f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=IBM&interval=5min&apikey={api_key}'
+
+# Make the request
+response = requests.get(url)
+data = response.json()
+
+# Print the response data
+print(data)
+{
+    "Meta Data": {
+        "1. Information": "Intraday Time Series",
+        "2. Symbol": "IBM",
+        "3. Last Refreshed": "2024-09-14 15:55:00",
+        "4. Interval": "5min",
+        "5. Output Size": "Compact",
+        "6. Time Zone": "US/Eastern"
+    },
+    "Time Series (5min)": {
+        "2024-09-14 15:55:00": {
+            "1. open": "141.8300",
+            "2. high": "141.8500",
+            "3. low": "141.7400",
+            "4. close": "141.7500",
+            "5. volume": "28000"
+        },
+        
+    }
+}
+
+# Your Alpha Vantage API key
+api_key = 'NJKYRUEVWVEEVL4Y'
+
+# List of stock symbols
+tickers = ['AAPL', 'MSFT', 'GOOG', 'TSLA']
+
+def fetch_stock_data(symbol, api_key):
+    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol={symbol}&apikey={api_key}&outputsize=full&datatype=json'
+    try:
+        response = requests.get(url)
+        data = response.json()
+        
+        # Print the full response for debugging
+        print(f"Response for {symbol}: {data}")
+        
+        if 'Time Series (Daily)' in data:
+            time_series = data['Time Series (Daily)']
+            df = pd.DataFrame.from_dict(time_series, orient='index')
+            df = df.rename(columns={
+                '1. open': 'Open',
+                '2. high': 'High',
+                '3. low': 'Low',
+                '4. close': 'Close',
+                '5. adjusted close': 'Adj Close',
+                '6. volume': 'Volume',
+                '7. dividend amount': 'Dividend',
+                '8. split coefficient': 'Split'
+            })
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index()
+            return df['Adj Close'].astype(float)
+        else:
+            print(f"Error fetching data for {symbol}: {data.get('Note', 'Unknown Error')}")
+            return pd.Series()
+    except Exception as e:
+        print(f"Exception occurred: {e}")
+        return pd.Series()
+
+# Fetch data for all tickers
+stock_data = pd.DataFrame()
+
+for ticker in tickers:
+    stock_data[ticker] = fetch_stock_data(ticker, api_key)
+
+print("Stock Data:")
+print(stock_data.head())
+print(stock_data.describe())  # Print summary statistics to check data integrity
+
+# Check if the DataFrame is empty or contains only NaN values
+if stock_data.empty or stock_data.isna().all().all():
+    print("Data is empty or contains only NaN values.")
+    exit()
+
+# Calculate daily returns
+daily_returns = stock_data.pct_change().dropna()
+print("Daily Returns:")
+print(daily_returns.head())
+print(daily_returns.describe())  # Print summary statistics to check data integrity
+
+# Check if the daily_returns DataFrame is empty or contains only NaN values
+if daily_returns.empty or daily_returns.isna().all().all():
+    print("Daily returns data is empty or contains only NaN values.")
+    exit()
+
+# Number of portfolios to simulate
+num_portfolios = 10000
+results = np.zeros((3, num_portfolios))
+
+# Simulate portfolios
+for i in range(num_portfolios):
+    # Randomly assign weights to each stock
+    weights = np.random.random(len(tickers))
+    weights /= np.sum(weights)
+    
+    # Calculate expected return and volatility
+    try:
+        port_return = np.sum(daily_returns.mean() * weights) * 252
+        port_volatility = np.sqrt(np.dot(weights.T, np.dot(daily_returns.cov() * 252, weights)))
+        sharpe_ratio = port_return / port_volatility if port_volatility != 0 else 0
+    except Exception as e:
+        print(f"Error in portfolio simulation: {e}")
+        continue
+    
+    # Store results (volatility, return, Sharpe ratio)
+    results[0, i] = port_volatility
+    results[1, i] = port_return
+    results[2, i] = sharpe_ratio
+
+# Plot Efficient Frontier
+plt.scatter(results[0, :], results[1, :], c=results[2, :], cmap='YlGnBu', marker='o')
+plt.xlabel('Volatility (Risk)')
+plt.ylabel('Return')
+plt.colorbar(label='Sharpe Ratio')
+plt.title('Efficient Frontier')
+plt.show()
+
+# Optimal Portfolio (Max Sharpe Ratio)
+if results[2, :].size > 0:  # Check if results array is non-empty
+    max_sharpe_idx = np.argmax(results[2, :])
+    optimal_volatility = results[0, max_sharpe_idx]
+    optimal_return = results[1, max_sharpe_idx]
+
+    print(f"Optimal Portfolio Return: {optimal_return}")
+    print(f"Optimal Portfolio Volatility: {optimal_volatility}")
+else:
+    print("No valid portfolios were simulated.")

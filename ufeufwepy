@@ -1,0 +1,45 @@
+import folium as fl
+import geopandas as gpd
+from gadm import GADMDownloader
+
+# Download administrative boundary data
+downloader = GADMDownloader(version="4.0")
+
+# Define the country name and administrative level
+country_name = "India"
+ad_level = 3  # Adjust level based on your needs
+
+# Retrieve the geospatial data for the selected country and administrative level
+gdf = downloader.get_shape_data_by_country_name(country_name=country_name, ad_level=ad_level)
+
+# Display the first few rows of the obtained geospatial data for a quick preview
+print(gdf.head(5))
+
+# Filter data for specific administrative regions
+gdf = gdf[gdf['NAME_1'] == 'Bihar']
+print(gdf['NAME_2'].unique())
+
+gdf = gdf[gdf['NAME_2'] == 'Kishanganj']
+
+# Create a Folium map object
+m = fl.Map(zoom_start=10, tiles="OpenStreetMap")
+
+# Iterate through each row in the geospatial data (gdf) representing administrative boundaries
+for _, r in gdf.iterrows():
+    # Simplify the geometry of the current boundary with a specified tolerance
+    sim_geo = gpd.GeoSeries(r["geometry"]).simplify(tolerance=0.00001)
+
+    # Convert the simplified geometry to JSON format
+    geo_j = sim_geo.to_json()
+
+    # Create a GeoJson layer from the JSON geometry, and style it with an orange fill color
+    geo_j_layer = fl.GeoJson(data=geo_j, style_function=lambda x: {"fillColor": "orange"})
+
+    # Add a popup with the NAME_3 attribute (administrative region name) to the GeoJson layer
+    fl.Popup(r["NAME_3"]).add_to(geo_j_layer)
+
+    # Add the styled GeoJson layer to the Folium map (m)
+    geo_j_layer.add_to(m)
+
+# Display the Folium map (m) with the administrative boundaries and popups
+m
